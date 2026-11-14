@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">NovaAttend</string>
+    <string name="tagline">Real-time classroom attendance, Excel/CSV roster sync, and AI insights</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="sign_out">Sign out</string>
+    <string name="role_coordinator">Class Coordinator</string>
+    <string name="role_representative">Class Representative</string>
+    <string name="nav_dashboard">Home</string>
+    <string name="nav_mark">Mark</string>
+    <string name="nav_upload">Upload</string>
+    <string name="nav_reports">Reports</string>
+    <string name="nav_ai">Gemini AI</string>
+    <string name="create_classroom_title">Create Classroom</string>
+    <string name="join_classroom_title">Join as Representative</string>
+    <string name="pick_spreadsheet_cta">Pick .xlsx or .csv File</string>
+    <string name="commit_students_cta">Commit to Firestore</string>
+    <string name="import_sample_cta">Import Sample (15)</string>
+    <string name="export_sample_csv_cta">Save Sample CSV</string>
+    <string name="coordinator_only_notice">Only Class Coordinators can upload or modify the student roster.</string>
+    <string name="empty_roster_title">No students enrolled yet</string>
+    <string name="empty_roster_subtitle">Upload an Excel (.xlsx) or CSV (.csv) roster, or import the sample class list to get started.</string>
+    <string name="analyze_photo_cta">Analyze Photo with Gemini</string>
+    <string name="pick_photo_cta">Choose Attendance Sheet Photo</string>
+    <string name="export_csv_cta">Download CSV</string>
+    <string name="share_csv_cta">Share CSV</string>
+    <string name="low_attendance_badge">! Below 75%</string>
+    <string name="retry_ai_cta">Retry</string>
+    <string name="remove_subject_title">Remove Subject</string>
+    <string name="remove_subject_confirm">Remove</string>
+</resources>

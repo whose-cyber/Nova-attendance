@@ -1,0 +1,278 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile storing institution (schoolId), role preference, and active classroom binding.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name from Google Sign-In."
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address (owner-only PII)."
+        },
+        "schoolId": {
+          "type": "string",
+          "description": "Normalized uppercase School Code / Tenant ID (e.g., DPS_BALLABGARH), or empty before onboarding."
+        },
+        "activeClassroomId": {
+          "type": "string",
+          "description": "Currently selected classroom document ID within the user's school, or empty string."
+        },
+        "activeRole": {
+          "type": "string",
+          "enum": ["coordinator", "representative"],
+          "description": "Active role mode selected by the user."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "displayName", "email", "schoolId", "activeClassroomId", "activeRole", "createdAt", "updatedAt"]
+    },
+    "School": {
+      "title": "School",
+      "description": "Institution / tenant root document isolating classrooms, rosters, invites, and attendance sessions.",
+      "type": "object",
+      "properties": {
+        "schoolId": {
+          "type": "string",
+          "description": "Canonical uppercase School Code / Tenant ID (e.g., DPS_BALLABGARH)."
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name or code of the school/college."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "UID of the coordinator who initialized the school tenant."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["schoolId", "name", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Classroom": {
+      "title": "Classroom",
+      "description": "School-scoped classroom workspace supporting real-time attendance sync between Coordinators and Representatives.",
+      "type": "object",
+      "properties": {
+        "schoolId": {
+          "type": "string",
+          "description": "Parent school tenant ID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Classroom display name (e.g., CS-301 Batch A)."
+        },
+        "joinCode": {
+          "type": "string",
+          "description": "Shareable alphanumeric code allowing a Class Representative from the same school to join."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the primary Class Coordinator who created the classroom."
+        },
+        "coordinatorIds": {
+          "type": "array",
+          "description": "Bounded list of Coordinator UIDs with full student roster and subject management permissions."
+        },
+        "memberIds": {
+          "type": "array",
+          "description": "Bounded list of all authorized member UIDs (Coordinators + Representatives) belonging to this school."
+        },
+        "subjects": {
+          "type": "array",
+          "description": "List of course subjects for attendance marking."
+        },
+        "timings": {
+          "type": "array",
+          "description": "List of lecture time slots."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["schoolId", "name", "joinCode", "ownerId", "coordinatorIds", "memberIds", "subjects", "timings", "createdAt", "updatedAt"]
+    },
+    "ClassroomInvite": {
+      "title": "ClassroomInvite",
+      "description": "School-scoped lookup index mapping a classroom joinCode to its classroomId.",
+      "type": "object",
+      "properties": {
+        "schoolId": {
+          "type": "string",
+          "description": "Parent school tenant ID."
+        },
+        "classroomId": {
+          "type": "string",
+          "description": "Target classroom document ID."
+        },
+        "classroomName": {
+          "type": "string",
+          "description": "Display name of the target classroom."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the classroom owner."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["schoolId", "classroomId", "classroomName", "ownerId", "createdAt"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student record belonging to a school's classroom roster, imported from Excel/CSV or added manually.",
+      "type": "object",
+      "properties": {
+        "schoolId": {
+          "type": "string",
+          "description": "Parent school tenant ID."
+        },
+        "classroomId": {
+          "type": "string",
+          "description": "Parent classroom document ID."
+        },
+        "rollNumber": {
+          "type": "string",
+          "description": "Student roll number."
+        },
+        "name": {
+          "type": "string",
+          "description": "Student full name."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "UID of the Coordinator who added the record."
+        },
+        "memberIds": {
+          "type": "array",
+          "description": "Denormalized member UIDs from parent classroom for rule-enforced list queries."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["schoolId", "classroomId", "rollNumber", "name", "createdBy", "memberIds", "createdAt", "updatedAt"]
+    },
+    "AttendanceSession": {
+      "title": "AttendanceSession",
+      "description": "Lecture attendance session scoped under a school and classroom, storing Present (P) and Absent (A) status per student ID.",
+      "type": "object",
+      "properties": {
+        "schoolId": {
+          "type": "string",
+          "description": "Parent school tenant ID."
+        },
+        "classroomId": {
+          "type": "string",
+          "description": "Parent classroom document ID."
+        },
+        "dateIso": {
+          "type": "string",
+          "description": "Session date in YYYY-MM-DD format."
+        },
+        "subject": {
+          "type": "string",
+          "description": "Subject name for the lecture."
+        },
+        "timing": {
+          "type": "string",
+          "description": "Lecture time slot."
+        },
+        "markedBy": {
+          "type": "string",
+          "description": "UID of the user who last marked attendance."
+        },
+        "markedByName": {
+          "type": "string",
+          "description": "Display name of the user who last marked attendance."
+        },
+        "records": {
+          "type": "object",
+          "description": "Map of studentId to attendance status ('P' or 'A')."
+        },
+        "memberIds": {
+          "type": "array",
+          "description": "Denormalized member UIDs from parent classroom for rule-enforced list queries."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["schoolId", "classroomId", "dateIso", "subject", "timing", "markedBy", "markedByName", "records", "memberIds", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile binding user to a single school tenant, active classroom, and role metadata."
+    },
+    "/schools/{schoolId}": {
+      "schema": { "$ref": "#/entities/School" },
+      "description": "Institution root documents isolating multi-school tenants."
+    },
+    "/schools/{schoolId}/invites/{joinCode}": {
+      "schema": { "$ref": "#/entities/ClassroomInvite" },
+      "description": "School-scoped invite lookup documents keyed by classroom join code."
+    },
+    "/schools/{schoolId}/classrooms/{classroomId}": {
+      "schema": { "$ref": "#/entities/Classroom" },
+      "description": "School-scoped classroom workspaces shared between Coordinators and Representatives."
+    },
+    "/schools/{schoolId}/classrooms/{classroomId}/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "School- and classroom-scoped student roster managed by Coordinators."
+    },
+    "/schools/{schoolId}/classrooms/{classroomId}/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/AttendanceSession" },
+      "description": "School- and classroom-scoped real-time lecture attendance records."
+    }
+  }
+}

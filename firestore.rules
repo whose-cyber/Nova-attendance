@@ -1,0 +1,387 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL PRIMITIVE HELPERS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidSchoolId(schoolId) {
+      return schoolId is string && schoolId.size() >= 3 && schoolId.size() <= 40 && schoolId.matches('^[A-Z0-9_\\-]+$');
+    }
+
+    function isValidJoinCode(code) {
+      return code is string && code.size() >= 4 && code.size() <= 16 && code.matches('^[A-Z0-9\\-]+$');
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function userProfilePath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function userBelongsToSchool(schoolId) {
+      return isSignedIn() &&
+             exists(userProfilePath(request.auth.uid)) &&
+             ('schoolId' in get(userProfilePath(request.auth.uid)).data) &&
+             get(userProfilePath(request.auth.uid)).data.schoolId == schoolId;
+    }
+
+    function userUnboundOrBelongsToSchool(schoolId) {
+      return isSignedIn() && (
+        !exists(userProfilePath(request.auth.uid)) ||
+        !('schoolId' in get(userProfilePath(request.auth.uid)).data) ||
+        get(userProfilePath(request.auth.uid)).data.schoolId == '' ||
+        get(userProfilePath(request.auth.uid)).data.schoolId == schoolId
+      );
+    }
+
+    function isSchoolClassroomMember(schoolId, classroomId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/schools/$(schoolId)/classrooms/$(classroomId)) &&
+             get(/databases/$(database)/documents/schools/$(schoolId)/classrooms/$(classroomId)).data.schoolId == schoolId &&
+             (request.auth.uid in get(/databases/$(database)/documents/schools/$(schoolId)/classrooms/$(classroomId)).data.memberIds ||
+              request.auth.uid in get(/databases/$(database)/documents/schools/$(schoolId)/classrooms/$(classroomId)).data.coordinatorIds);
+    }
+
+    function isSchoolClassroomCoordinator(schoolId, classroomId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/schools/$(schoolId)/classrooms/$(classroomId)) &&
+             get(/databases/$(database)/documents/schools/$(schoolId)/classrooms/$(classroomId)).data.schoolId == schoolId &&
+             request.auth.uid in get(/databases/$(database)/documents/schools/$(schoolId)/classrooms/$(classroomId)).data.coordinatorIds;
+    }
+
+    // --- ENTITY VALIDATION HELPERS ---
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             data.email is string && data.email.size() <= 150 &&
+             (data.schoolId == '' || isValidSchoolId(data.schoolId)) &&
+             data.activeClassroomId is string && data.activeClassroomId.size() <= 128 &&
+             data.activeRole in ['coordinator', 'representative'];
+    }
+
+    function isValidSchool(data) {
+      return isValidSchoolId(data.schoolId) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128;
+    }
+
+    function isValidClassroom(data) {
+      return isValidSchoolId(data.schoolId) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+             isValidJoinCode(data.joinCode) &&
+             data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+             data.coordinatorIds is list && data.coordinatorIds.size() >= 1 && data.coordinatorIds.size() <= 10 &&
+             data.coordinatorIds[0] is string &&
+             data.memberIds is list && data.memberIds.size() >= 1 && data.memberIds.size() <= 50 &&
+             data.memberIds[0] is string &&
+             data.subjects is list && data.subjects.size() <= 25 &&
+             (data.subjects.size() == 0 || (data.subjects[0] is string && data.subjects[0].size() <= 80)) &&
+             data.timings is list && data.timings.size() <= 25 &&
+             (data.timings.size() == 0 || (data.timings[0] is string && data.timings[0].size() <= 60));
+    }
+
+    function isValidInvite(data) {
+      return isValidSchoolId(data.schoolId) &&
+             isValidId(data.classroomId) &&
+             data.classroomName is string && data.classroomName.size() >= 1 && data.classroomName.size() <= 80 &&
+             data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128;
+    }
+
+    function isValidStudent(data) {
+      return isValidSchoolId(data.schoolId) &&
+             isValidId(data.classroomId) &&
+             data.rollNumber is string && data.rollNumber.size() >= 1 && data.rollNumber.size() <= 40 &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+             data.memberIds is list && data.memberIds.size() >= 1 && data.memberIds.size() <= 50 &&
+             data.memberIds[0] is string;
+    }
+
+    function isValidSession(data) {
+      return isValidSchoolId(data.schoolId) &&
+             isValidId(data.classroomId) &&
+             data.dateIso is string && data.dateIso.size() == 10 && data.dateIso.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+             data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 80 &&
+             data.timing is string && data.timing.size() >= 1 && data.timing.size() <= 60 &&
+             data.markedBy is string && data.markedBy.size() >= 1 && data.markedBy.size() <= 128 &&
+             data.markedByName is string && data.markedByName.size() >= 1 && data.markedByName.size() <= 100 &&
+             data.records is map && data.records.size() <= 500 &&
+             data.memberIds is list && data.memberIds.size() >= 1 && data.memberIds.size() <= 50 &&
+             data.memberIds[0] is string;
+    }
+
+    // --- COLLECTION RULES ---
+    match /users/{userId} {
+      allow get, list: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'email', 'schoolId', 'activeClassroomId', 'activeRole', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'schoolId', 'activeClassroomId', 'activeRole', 'createdAt', 'updatedAt']) &&
+                       isValidTimestamp(incoming().createdAt) &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserProfile(incoming()) &&
+                       (!('userId' in existing()) || incoming().userId == existing().userId) &&
+                       (!('email' in existing()) || incoming().email == existing().email) &&
+                       (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt) &&
+                       // Multi-tenant isolation: schoolId can be bound once from '' (or legacy missing field) and cannot be switched cross-school afterwards
+                       (!('schoolId' in existing()) || existing().schoolId == '' || incoming().schoolId == existing().schoolId) &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'schoolId', 'activeClassroomId', 'activeRole', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    match /schools/{schoolId} {
+      allow get: if isSignedIn() && isValidSchoolId(schoolId) && userBelongsToSchool(schoolId);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidSchoolId(schoolId) &&
+                       incoming().schoolId == schoolId &&
+                       incoming().createdBy == request.auth.uid &&
+                       incoming().keys().hasAll(['schoolId', 'name', 'createdBy', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['schoolId', 'name', 'createdBy', 'createdAt', 'updatedAt']) &&
+                       isValidTimestamp(incoming().createdAt) &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       isValidSchool(incoming()) &&
+                       userBelongsToSchool(schoolId);
+
+      allow update, delete: if false;
+
+      match /invites/{joinCode} {
+        allow get: if isSignedIn() &&
+                      isValidSchoolId(schoolId) &&
+                      isValidJoinCode(joinCode) &&
+                      userUnboundOrBelongsToSchool(schoolId);
+        allow list: if false;
+
+        allow create: if isSignedIn() &&
+                         isValidSchoolId(schoolId) &&
+                         isValidJoinCode(joinCode) &&
+                         incoming().schoolId == schoolId &&
+                         incoming().ownerId == request.auth.uid &&
+                         incoming().keys().hasAll(['schoolId', 'classroomId', 'classroomName', 'ownerId', 'createdAt']) &&
+                         incoming().keys().hasOnly(['schoolId', 'classroomId', 'classroomName', 'ownerId', 'createdAt']) &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidInvite(incoming()) &&
+                         userBelongsToSchool(schoolId) &&
+                         exists(/databases/$(database)/documents/schools/$(schoolId)/classrooms/$(incoming().classroomId)) &&
+                         get(/databases/$(database)/documents/schools/$(schoolId)/classrooms/$(incoming().classroomId)).data.ownerId == request.auth.uid;
+
+        allow update: if false;
+        allow delete: if isSignedIn() &&
+                         isValidSchoolId(schoolId) &&
+                         isValidJoinCode(joinCode) &&
+                         userBelongsToSchool(schoolId) &&
+                         existing().ownerId == request.auth.uid;
+      }
+
+      match /classrooms/{classroomId} {
+        allow get: if isSignedIn() &&
+                      isValidSchoolId(schoolId) &&
+                      isValidId(classroomId) &&
+                      userBelongsToSchool(schoolId) &&
+                      existing().schoolId == schoolId &&
+                      (request.auth.uid in existing().memberIds ||
+                       request.auth.uid in existing().coordinatorIds);
+
+        // Cost-optimized list rule (no get() in list): enforced via path schoolId + memberIds/coordinatorIds filter
+        allow list: if isSignedIn() &&
+                       isValidSchoolId(schoolId) &&
+                       (request.auth.uid in resource.data.memberIds ||
+                        request.auth.uid in resource.data.coordinatorIds);
+
+        allow create: if isSignedIn() &&
+                         isValidSchoolId(schoolId) &&
+                         isValidId(classroomId) &&
+                         incoming().schoolId == schoolId &&
+                         incoming().ownerId == request.auth.uid &&
+                         request.auth.uid in incoming().coordinatorIds &&
+                         request.auth.uid in incoming().memberIds &&
+                         incoming().keys().hasAll(['schoolId', 'name', 'joinCode', 'ownerId', 'coordinatorIds', 'memberIds', 'subjects', 'timings', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['schoolId', 'name', 'joinCode', 'ownerId', 'coordinatorIds', 'memberIds', 'subjects', 'timings', 'createdAt', 'updatedAt']) &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidClassroom(incoming()) &&
+                         userBelongsToSchool(schoolId);
+
+        allow update: if isSignedIn() &&
+                         isValidSchoolId(schoolId) &&
+                         isValidId(classroomId) &&
+                         isValidClassroom(incoming()) &&
+                         incoming().schoolId == existing().schoolId &&
+                         incoming().schoolId == schoolId &&
+                         incoming().ownerId == existing().ownerId &&
+                         incoming().joinCode == existing().joinCode &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         userBelongsToSchool(schoolId) && (
+                           // Action 1: Coordinator updates classroom settings, subjects, timings, or member list
+                           (request.auth.uid in existing().coordinatorIds &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'subjects', 'timings', 'memberIds', 'updatedAt'])) ||
+                           // Action 2: Same-school Representative joins by adding only their own UID to memberIds
+                           (!(request.auth.uid in existing().memberIds) &&
+                            incoming().memberIds.hasAll(existing().memberIds) &&
+                            incoming().memberIds.size() == existing().memberIds.size() + 1 &&
+                            request.auth.uid in incoming().memberIds &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberIds', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() &&
+                         isValidSchoolId(schoolId) &&
+                         isValidId(classroomId) &&
+                         userBelongsToSchool(schoolId) &&
+                         request.auth.uid == existing().ownerId;
+
+        match /students/{studentId} {
+          allow get: if isSignedIn() &&
+                        isValidSchoolId(schoolId) &&
+                        isValidId(classroomId) &&
+                        isValidId(studentId) &&
+                        userBelongsToSchool(schoolId) &&
+                        isSchoolClassroomMember(schoolId, classroomId) &&
+                        (resource == null || (
+                          existing().schoolId == schoolId &&
+                          existing().classroomId == classroomId
+                        ));
+
+          allow list: if isSignedIn() &&
+                         isValidSchoolId(schoolId) &&
+                         isValidId(classroomId) &&
+                         request.auth.uid in resource.data.memberIds;
+
+          allow create: if isSignedIn() &&
+                           isValidSchoolId(schoolId) &&
+                           isValidId(classroomId) &&
+                           isValidId(studentId) &&
+                           incoming().schoolId == schoolId &&
+                           incoming().classroomId == classroomId &&
+                           incoming().createdBy == request.auth.uid &&
+                           request.auth.uid in incoming().memberIds &&
+                           incoming().keys().hasAll(['schoolId', 'classroomId', 'rollNumber', 'name', 'createdBy', 'memberIds', 'createdAt', 'updatedAt']) &&
+                           incoming().keys().hasOnly(['schoolId', 'classroomId', 'rollNumber', 'name', 'createdBy', 'memberIds', 'createdAt', 'updatedAt']) &&
+                           isValidTimestamp(incoming().createdAt) &&
+                           isValidTimestamp(incoming().updatedAt) &&
+                           isValidStudent(incoming()) &&
+                           userBelongsToSchool(schoolId) &&
+                           isSchoolClassroomCoordinator(schoolId, classroomId);
+
+          allow update: if isSignedIn() &&
+                           isValidSchoolId(schoolId) &&
+                           isValidId(classroomId) &&
+                           isValidId(studentId) &&
+                           isValidStudent(incoming()) &&
+                           incoming().schoolId == existing().schoolId &&
+                           incoming().classroomId == existing().classroomId &&
+                           incoming().createdBy == existing().createdBy &&
+                           incoming().createdAt == existing().createdAt &&
+                           isValidTimestamp(incoming().updatedAt) &&
+                           userBelongsToSchool(schoolId) &&
+                           isSchoolClassroomCoordinator(schoolId, classroomId) &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['rollNumber', 'name', 'memberIds', 'updatedAt']);
+
+          allow delete: if isSignedIn() &&
+                           isValidSchoolId(schoolId) &&
+                           isValidId(classroomId) &&
+                           isValidId(studentId) &&
+                           userBelongsToSchool(schoolId) &&
+                           isSchoolClassroomCoordinator(schoolId, classroomId);
+        }
+
+        match /sessions/{sessionId} {
+          allow get: if isSignedIn() &&
+                        isValidSchoolId(schoolId) &&
+                        isValidId(classroomId) &&
+                        isValidId(sessionId) &&
+                        userBelongsToSchool(schoolId) &&
+                        isSchoolClassroomMember(schoolId, classroomId) &&
+                        (resource == null || (
+                          existing().schoolId == schoolId &&
+                          existing().classroomId == classroomId
+                        ));
+
+          allow list: if isSignedIn() &&
+                         isValidSchoolId(schoolId) &&
+                         isValidId(classroomId) &&
+                         request.auth.uid in resource.data.memberIds;
+
+          allow create: if isSignedIn() &&
+                           isValidSchoolId(schoolId) &&
+                           isValidId(classroomId) &&
+                           isValidId(sessionId) &&
+                           incoming().schoolId == schoolId &&
+                           incoming().classroomId == classroomId &&
+                           incoming().markedBy == request.auth.uid &&
+                           request.auth.uid in incoming().memberIds &&
+                           incoming().keys().hasAll(['schoolId', 'classroomId', 'dateIso', 'subject', 'timing', 'markedBy', 'markedByName', 'records', 'memberIds', 'createdAt', 'updatedAt']) &&
+                           incoming().keys().hasOnly(['schoolId', 'classroomId', 'dateIso', 'subject', 'timing', 'markedBy', 'markedByName', 'records', 'memberIds', 'createdAt', 'updatedAt']) &&
+                           isValidTimestamp(incoming().createdAt) &&
+                           isValidTimestamp(incoming().updatedAt) &&
+                           isValidSession(incoming()) &&
+                           userBelongsToSchool(schoolId) &&
+                           isSchoolClassroomMember(schoolId, classroomId);
+
+          allow update: if isSignedIn() &&
+                           isValidSchoolId(schoolId) &&
+                           isValidId(classroomId) &&
+                           isValidId(sessionId) &&
+                           isValidSession(incoming()) &&
+                           incoming().schoolId == existing().schoolId &&
+                           incoming().classroomId == existing().classroomId &&
+                           incoming().dateIso == existing().dateIso &&
+                           incoming().subject == existing().subject &&
+                           incoming().timing == existing().timing &&
+                           incoming().createdAt == existing().createdAt &&
+                           isValidTimestamp(incoming().updatedAt) &&
+                           userBelongsToSchool(schoolId) && (
+                             // Action 1: Same-school Coordinator or Representative marks attendance (and may self-add to memberIds)
+                             (isSchoolClassroomMember(schoolId, classroomId) &&
+                              incoming().markedBy == request.auth.uid &&
+                              request.auth.uid in incoming().memberIds &&
+                              incoming().memberIds.hasAll(existing().memberIds) &&
+                              incoming().diff(existing()).affectedKeys().hasOnly(['records', 'markedBy', 'markedByName', 'memberIds', 'updatedAt'])) ||
+                             // Action 2: Coordinator syncs memberIds when a Representative joins
+                             (isSchoolClassroomCoordinator(schoolId, classroomId) &&
+                              incoming().diff(existing()).affectedKeys().hasOnly(['memberIds', 'updatedAt']))
+                           );
+
+          allow delete: if isSignedIn() &&
+                           isValidSchoolId(schoolId) &&
+                           isValidId(classroomId) &&
+                           isValidId(sessionId) &&
+                           userBelongsToSchool(schoolId) &&
+                           isSchoolClassroomCoordinator(schoolId, classroomId);
+        }
+      }
+    }
+  }
+}

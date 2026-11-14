@@ -1,0 +1,6 @@
+{
+  "name": "NovaAttend",
+  "description": "Role-based attendance marking system with real-time Firestore sync, Excel and CSV student import, attendance analytics reports, Gemini AI assistant, and photo sheet analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
